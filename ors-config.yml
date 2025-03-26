@@ -6,7 +6,7 @@ ors:
   engine:
     profile_default:
       build:
-        source_file: ors-api/src/test/files/heidelberg.test.pbf
+        source_file: /home/ors/files/netherlands-latest.osm.pbf
     profiles:
       driving-car:
         enabled: true
