@@ -62,9 +62,9 @@ COPY --chown=ors:ors ./ors-config.env /example-ors-config.env
 
 # Rewrite the example config to use the right files in the container
 RUN yq -i -p=props -o=props \
-    '.ors.engine.profile_default.build.source_file="/home/ors/files/example-heidelberg.test.pbf"' \
+    '.ors.engine.profile_default.build.source_file="/home/ors/files/netherlands-latest.osm.pbf"' \
     /example-ors-config.env && \
-    yq -i e '.ors.engine.profile_default.build.source_file = "/home/ors/files/example-heidelberg.test.pbf"' \
+    yq -i e '.ors.engine.profile_default.build.source_file = "/home/ors/files/netherlands-latest.osm.pbf"' \
     /example-ors-config.yml
 
 ENV BUILD_GRAPHS="False"
