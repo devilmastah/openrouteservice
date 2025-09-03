@@ -14,6 +14,7 @@
 package org.heigit.ors.routing.graphhopper.extensions;
 
 import com.carrotsearch.hppc.LongArrayList;
+import com.graphhopper.coll.GHLongObjectHashMap;
 import com.graphhopper.reader.ReaderNode;
 import com.graphhopper.reader.ReaderWay;
 import com.graphhopper.reader.osm.OSMReader;
@@ -22,7 +23,7 @@ import com.graphhopper.util.EdgeIteratorState;
 import com.graphhopper.util.shapes.GHPoint;
 import org.apache.log4j.Logger;
 import org.heigit.ors.routing.graphhopper.extensions.reader.osmfeatureprocessors.OSMFeatureFilter;
-import org.heigit.ors.routing.graphhopper.extensions.reader.osmfeatureprocessors.WheelchairWayFilter;
+import org.heigit.ors.routing.graphhopper.extensions.reader.osmfeatureprocessors.PedestrianWayFilter;
 import org.heigit.ors.routing.graphhopper.extensions.storages.builders.*;
 import org.locationtech.jts.geom.Coordinate;
 
@@ -36,9 +37,9 @@ public class ORSOSMReader extends OSMReader {
 
     private final GraphProcessContext procCntx;
     private boolean processNodeTags;
-
-    private final HashMap<Long, HashMap<String, String>> nodeTags = new HashMap<>();
-
+    private static final String KEY_COUNTRY = "country";
+    private Map<Long, String> countries;
+    private final GHLongObjectHashMap<Map<String, String>> nodeTags = new GHLongObjectHashMap<>(200, 0.5);
     private boolean processGeom = false;
     private boolean processSimpleGeom = false;
     private boolean processWholeGeom = false;
@@ -64,6 +65,7 @@ public class ORSOSMReader extends OSMReader {
         // Look if we should do border processing - if so then we have to process the geometry
         for (GraphStorageBuilder b : this.procCntx.getStorageBuilders()) {
             if (b instanceof BordersGraphStorageBuilder) {
+                this.countries = new HashMap<>();
                 this.processGeom = true;
             }
 
@@ -73,9 +75,7 @@ public class ORSOSMReader extends OSMReader {
             }
 
             if (b instanceof WheelchairGraphStorageBuilder) {
-                filtersToApply.add(new WheelchairWayFilter());
                 this.processNodeTags = true;
-                this.detachSidewalksFromRoad = true;
                 this.processSimpleGeom = true;
                 extraTagKeys.add("kerb");
                 extraTagKeys.add("kerb:both");
@@ -97,6 +97,11 @@ public class ORSOSMReader extends OSMReader {
                 extraTagKeys.add("motorcar");
                 extraTagKeys.add("motorcycle");
             }
+        }
+
+        if (procCntx.isUseSidewalks()) {
+            detachSidewalksFromRoad = true;
+            filtersToApply.add(new PedestrianWayFilter());
         }
     }
 
@@ -120,13 +125,18 @@ public class ORSOSMReader extends OSMReader {
                 nodeTags.put(node.getId(), tagValues);
             }
         }
+
+        if (countries != null  && node.hasTag(KEY_COUNTRY)) {
+            countries.put(node.getId(), node.getTag(KEY_COUNTRY));
+        }
+
         return node;
     }
 
     @Override
     protected void processWay(ReaderWay way) {
         // As a first step we need to check to see if we should try to split the way
-        if (this.detachSidewalksFromRoad) {
+        if (detachSidewalksFromRoad) {
             // If we are requesting to split sidewalks, then we need to create multiple ways from a single road
             // For example, if a road way has been tagged as having sidewalks on both sides (sidewalk=both), then we
             // need to create two ways - one for the left sidewalk and one for the right. The Graph Builder would then
@@ -166,7 +176,6 @@ public class ORSOSMReader extends OSMReader {
      */
     @Override
     public void onProcessWay(ReaderWay way) {
-
         Map<Integer, Map<String, String>> tags = new HashMap<>();
         ArrayList<Coordinate> coords = new ArrayList<>();
         ArrayList<Coordinate> allCoordinates = new ArrayList<>();
@@ -184,10 +193,16 @@ public class ORSOSMReader extends OSMReader {
                 long id = osmNodeIds.get(i);
                 // replace the osm id with the internal id
                 int internalId = getNodeMap().get(id);
-                HashMap<String, String> tagsForNode = nodeTags.get(id);
+                Map<String, String> tagsForNode = nodeTags.get(id);
+
+                if (countries != null && countries.containsKey(id)) {
+                    if (tagsForNode == null)
+                        tagsForNode = new HashMap<>();
+                    tagsForNode.put(KEY_COUNTRY, countries.get(id));
+                }
 
                 if (tagsForNode != null) {
-                    tags.put(internalId, nodeTags.get(id));
+                    tags.put(internalId, tagsForNode);
                 }
             }
         }

@@ -13,6 +13,8 @@
  */
 package org.heigit.ors.routing.pathprocessors;
 
+import com.graphhopper.routing.ev.WaySurface;
+import com.graphhopper.routing.ev.WayType;
 import com.graphhopper.routing.querygraph.EdgeIteratorStateHelper;
 import com.graphhopper.routing.util.FlagEncoder;
 import com.graphhopper.routing.util.PathProcessor;
@@ -32,7 +34,6 @@ import org.heigit.ors.routing.graphhopper.extensions.reader.borders.CountryBorde
 import org.heigit.ors.routing.graphhopper.extensions.storages.*;
 import org.heigit.ors.routing.graphhopper.extensions.util.PriorityCode;
 import org.heigit.ors.routing.parameters.ProfileParameters;
-import org.heigit.ors.routing.util.WaySurfaceDescription;
 import org.heigit.ors.routing.util.extrainfobuilders.AppendableRouteExtraInfoBuilder;
 import org.heigit.ors.routing.util.extrainfobuilders.AppendableSteepnessExtraInfoBuilder;
 import org.heigit.ors.routing.util.extrainfobuilders.RouteExtraInfoBuilder;
@@ -45,7 +46,6 @@ import java.util.List;
 import static com.graphhopper.routing.util.EncodingManager.getKey;
 
 public class ExtraInfoProcessor implements PathProcessor {
-    private WaySurfaceTypeGraphStorage extWaySurface;
     private WayCategoryGraphStorage extWayCategory;
     private GreenIndexGraphStorage extGreenIndex;
     private NoiseIndexGraphStorage extNoiseIndex;
@@ -156,20 +156,14 @@ public class ExtraInfoProcessor implements PathProcessor {
                 }
             }
 
-            if (includeExtraInfo(extraInfo, RouteExtraInfoFlag.SURFACE) || includeExtraInfo(extraInfo, RouteExtraInfoFlag.WAY_TYPE)) {
-                extWaySurface = GraphStorageUtils.getGraphExtension(graphHopperStorage, WaySurfaceTypeGraphStorage.class);
-                if (extWaySurface != null) {
-                    if (includeExtraInfo(extraInfo, RouteExtraInfoFlag.SURFACE)) {
-                        surfaceInfo = new RouteExtraInfo("surface");
-                        surfaceInfoBuilder = new AppendableRouteExtraInfoBuilder(surfaceInfo);
-                    }
-                    if (includeExtraInfo(extraInfo, RouteExtraInfoFlag.WAY_TYPE)) {
-                        wayTypeInfo = new RouteExtraInfo("waytype");
-                        wayTypeInfoBuilder = new AppendableRouteExtraInfoBuilder(wayTypeInfo);
-                    }
-                } else {
-                    skippedExtras.add("surface/waytype");
-                }
+            if (includeExtraInfo(extraInfo, RouteExtraInfoFlag.SURFACE)) {
+                surfaceInfo = new RouteExtraInfo("surface");
+                surfaceInfoBuilder = new AppendableRouteExtraInfoBuilder(surfaceInfo);
+            }
+
+            if (includeExtraInfo(extraInfo, RouteExtraInfoFlag.WAY_TYPE)) {
+                wayTypeInfo = new RouteExtraInfo("waytype");
+                wayTypeInfoBuilder = new AppendableRouteExtraInfoBuilder(wayTypeInfo);
             }
 
             if (includeExtraInfo(extraInfo, RouteExtraInfoFlag.STEEPNESS)) {
@@ -440,14 +434,14 @@ public class ExtraInfoProcessor implements PathProcessor {
             }
         }
 
-        if (extWaySurface != null && wayTypeInfo != null || surfaceInfo != null) {
-            WaySurfaceDescription wsd = extWaySurface.getEdgeValue(EdgeIteratorStateHelper.getOriginalEdge(edge), buffer);
+        if (surfaceInfoBuilder != null) {
+            WaySurface waySurface = encoder.getEnumEncodedValue(WaySurface.KEY, WaySurface.class).getEnum(false, edge.getFlags());
+            surfaceInfoBuilder.addSegment(waySurface.value(), waySurface.value(), geom, dist);
+        }
 
-            if (surfaceInfoBuilder != null)
-                surfaceInfoBuilder.addSegment(wsd.getSurfaceType().value(), wsd.getSurfaceType().value(), geom, dist);
-
-            if (wayTypeInfo != null)
-                wayTypeInfoBuilder.addSegment(wsd.getWayType(), wsd.getWayType(), geom, dist);
+        if (wayTypeInfo != null){
+            WayType wayType = encoder.getEnumEncodedValue(WayType.KEY, WayType.class).getEnum(false, edge.getFlags());
+            wayTypeInfoBuilder.addSegment(wayType.value(), wayType.value(), geom, dist);
         }
 
         if (wayCategoryInfoBuilder != null) {

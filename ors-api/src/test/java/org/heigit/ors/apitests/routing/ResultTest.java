@@ -180,6 +180,18 @@ class ResultTest extends ServiceTest {
         // 8.691891431808473, 49.41331858818114
 
 
+        JSONArray unreachableCoords = new JSONArray();
+        JSONArray unreachableCoord1 = new JSONArray();
+        unreachableCoord1.put(6.929281);
+        unreachableCoord1.put(45.707362);
+        unreachableCoords.put(unreachableCoord1);
+        JSONArray unreachableCoord2 = new JSONArray();
+        unreachableCoord2.put(6.92281);
+        unreachableCoord2.put(45.507362);
+        unreachableCoords.put(unreachableCoord2);
+        addParameter("unreachableCoords", unreachableCoords);
+
+
         JSONArray extraInfo = new JSONArray();
         extraInfo.put("surface");
         extraInfo.put("suitability");
@@ -572,6 +584,8 @@ class ResultTest extends ServiceTest {
                             <xs:element type="xs:string" name="attribution" minOccurs="0"/>
                             <xs:element type="xs:string" name="engine" minOccurs="0"/>
                             <xs:element type="xs:string" name="build_date" minOccurs="0"/>
+                            <xs:element type="xs:string" name="graph_date" minOccurs="0"/>
+                            <xs:element type="xs:string" name="osm_date" minOccurs="0"/>
                             <xs:element type="xs:string" name="profile" minOccurs="0"/>
                             <xs:element type="xs:string" name="preference" minOccurs="0"/>
                             <xs:element type="xs:string" name="language" minOccurs="0"/>
@@ -777,8 +791,34 @@ class ResultTest extends ServiceTest {
                 .body("metadata.engine.containsKey('version')", is(true))
                 .body("metadata.engine.containsKey('build_date')", is(true))
                 .body("metadata.engine.containsKey('graph_date')", is(true))
+                .body("metadata.engine.containsKey('osm_date')", is(true))
                 .body("metadata.containsKey('system_message')", is(true))
                 .statusCode(200);
+    }
+
+    @Test
+    void testCompleteEngineInfoOnRouteNotFound() {
+        JSONObject body = new JSONObject();
+        body.put("coordinates", getParameter("unreachableCoords"));
+        body.put("id", "request123");
+        given()
+            .headers(CommonHeaders.geoJsonContent)
+            .pathParam("profile", getParameter("carProfile"))
+            .body(body.toString())
+            .when()
+            .post(getEndPointPath() + "/{profile}/geojson")
+            .then()
+            .assertThat()
+            .body("any {it.key == 'info'}", is(true))
+            .body("any {it.key == 'error'}", is(true))
+            .body("error.containsKey('code')", is(true))
+            .body("error.containsKey('message')", is(true))
+            .body("info.engine.containsKey('version')", is(true))
+            .body("info.engine.containsKey('build_date')", is(true))
+            .body("info.engine.containsKey('graph_date')", is(true))
+            .body("info.engine.containsKey('osm_date')", is(true))
+            .body("info.containsKey('timestamp')", is(true))
+            .statusCode(404);
     }
 
     @Test
@@ -1177,7 +1217,6 @@ class ResultTest extends ServiceTest {
         params.put("restrictions", restrictions);
         JSONObject options = new JSONObject();
         options.put("profile_params", params);
-        options.put("vehicle_type", "hgv");
         body.put("options", options);
         body.put("continue_straight", false);
 
@@ -1636,7 +1675,6 @@ class ResultTest extends ServiceTest {
         body.put("units", "m");
 
         JSONObject options = new JSONObject();
-        options.put("vehicle_type", "hgv");
         body.put("options", options);
 
         // Test that buses are not allowed on Neue Schlossstraße (https://www.openstreetmap.org/way/150549948)
@@ -1678,7 +1716,6 @@ class ResultTest extends ServiceTest {
         body.put("units", "m");
 
         JSONObject options = new JSONObject();
-        options.put("vehicle_type", "hgv");
         body.put("options", options);
 
         given()
@@ -1723,7 +1760,6 @@ class ResultTest extends ServiceTest {
         params.put("restrictions", restrictions);
         JSONObject options = new JSONObject();
         options.put("profile_params", params);
-        options.put("vehicle_type", "hgv");
         body.put("options", options);
 
         given()
@@ -1746,7 +1782,6 @@ class ResultTest extends ServiceTest {
         params.put("restrictions", restrictions);
         options = new JSONObject();
         options.put("profile_params", params);
-        options.put("vehicle_type", "hgv");
         body.put("options", options);
 
         given()
@@ -1778,7 +1813,6 @@ class ResultTest extends ServiceTest {
         params.put("restrictions", restrictions);
         JSONObject options = new JSONObject();
         options.put("profile_params", params);
-        options.put("vehicle_type", "hgv");
         body.put("options", options);
 
         given()
@@ -1801,7 +1835,6 @@ class ResultTest extends ServiceTest {
         params.put("restrictions", restrictions);
         options = new JSONObject();
         options.put("profile_params", params);
-        options.put("vehicle_type", "hgv");
         body.put("options", options);
 
         given()
@@ -1833,7 +1866,6 @@ class ResultTest extends ServiceTest {
         params.put("restrictions", restrictions);
         JSONObject options = new JSONObject();
         options.put("profile_params", params);
-        options.put("vehicle_type", "hgv");
         body.put("options", options);
 
         given()
@@ -1896,12 +1928,11 @@ class ResultTest extends ServiceTest {
         body.put("coordinates", HelperFunctions.constructCoords("8.684682,49.401961|8.690518,49.405326"));
         body.put("preference", "shortest");
         body.put("instructions", false);
-        body.put("optimized", false);
         body.put("units", "m");
 
         JSONObject options = new JSONObject();
-        options.put("avoid_borders", "controlled");
         body.put("options", options);
+        options.put("avoid_borders", "controlled");
 
         // Test that providing border control in avoid_features works
         given()
@@ -1914,14 +1945,24 @@ class ResultTest extends ServiceTest {
                 .then()
                 .assertThat()
                 .body("any { it.key == 'routes' }", is(true))
+                .body("routes[0].summary.distance", is(closeTo(1156, 1)))
+                .statusCode(200);
+
+        // Test that avoiding borders with a profile that does not rely on OSM country tags provides different results
+        given()
+                .config(JSON_CONFIG_DOUBLE_NUMBERS)
+                .headers(CommonHeaders.jsonContent)
+                .pathParam("profile", "driving-hgv")
+                .body(body.toString())
+                .when()
+                .post(getEndPointPath() + "/{profile}")
+                .then()
+                .assertThat()
+                .body("any { it.key == 'routes' }", is(true))
                 .body("routes[0].summary.distance", is(closeTo(1404, 1)))
                 .statusCode(200);
 
-        options = new JSONObject();
         options.put("avoid_borders", "all");
-        body.put("options", options);
-
-        // Option 1 signifies that the route should not cross any borders
         given()
                 .headers(CommonHeaders.jsonContent)
                 .pathParam("profile", getParameter("carProfile"))
@@ -1941,12 +1982,11 @@ class ResultTest extends ServiceTest {
         body.put("coordinates", HelperFunctions.constructCoords("8.684682,49.401961|8.690518,49.405326"));
         body.put("preference", "shortest");
         body.put("instructions", false);
-        body.put("optimized", false);
         body.put("units", "m");
 
         JSONObject options = new JSONObject();
-        options.put("avoid_countries", constructFromPipedList("3"));
         body.put("options", options);
+        options.put("avoid_countries", constructFromPipedList("3"));
 
         given()
                 .config(JSON_CONFIG_DOUBLE_NUMBERS)
@@ -1958,12 +1998,10 @@ class ResultTest extends ServiceTest {
                 .then().log().ifValidationFails()
                 .assertThat()
                 .body("any { it.key == 'routes' }", is(true))
-                .body("routes[0].summary.distance", is(closeTo(1156.6, 1)))
+                .body("routes[0].summary.distance", is(closeTo(1156, 1)))
                 .statusCode(200);
-        options = new JSONObject();
-        options.put("avoid_countries", constructFromPipedList("1|3"));
-        body.put("options", options);
 
+        options.put("avoid_countries", constructFromPipedList("1|3"));
         given()
                 .config(JSON_CONFIG_DOUBLE_NUMBERS)
                 .headers(CommonHeaders.jsonContent)
@@ -1974,11 +2012,11 @@ class ResultTest extends ServiceTest {
                 .then()
                 .assertThat()
                 .body("any { it.key == 'routes' }", is(true))
-                .body("routes[0].summary.distance", is(closeTo(3172.4, 3)))
+                .body("routes[0].summary.distance", is(closeTo(3159, 3)))
                 .statusCode(200);
 
         // Test avoid_countries with ISO 3166-1 Alpha-2 parameters
-        options.put("avoid_countries", constructFromPipedList("AT|FR"));
+        options.put("avoid_countries", constructFromPipedList("XA|XC"));
         given()
                 .config(JSON_CONFIG_DOUBLE_NUMBERS)
                 .headers(CommonHeaders.jsonContent)
@@ -1989,11 +2027,11 @@ class ResultTest extends ServiceTest {
                 .then().log().ifValidationFails()
                 .assertThat()
                 .body("any { it.key == 'routes' }", is(true))
-                .body("routes[0].summary.distance", is(closeTo(3172.4, 3)))
+                .body("routes[0].summary.distance", is(closeTo(3159, 3)))
                 .statusCode(200);
 
         // Test avoid_countries with ISO 3166-1 Alpha-3 parameters
-        options.put("avoid_countries", constructFromPipedList("AUT|FRA"));
+        options.put("avoid_countries", constructFromPipedList("XXA|XXC"));
         given()
                 .config(JSON_CONFIG_DOUBLE_NUMBERS)
                 .headers(CommonHeaders.jsonContent)
@@ -2004,9 +2042,8 @@ class ResultTest extends ServiceTest {
                 .then()
                 .assertThat()
                 .body("any { it.key == 'routes' }", is(true))
-                .body("routes[0].summary.distance", is(closeTo(3172.4f, 3)))
+                .body("routes[0].summary.distance", is(closeTo(3159, 3)))
                 .statusCode(200);
-
     }
 
     @Test
@@ -2212,7 +2249,7 @@ class ResultTest extends ServiceTest {
                 .assertThat()
                 .body("any { it.key == 'routes' }", is(true))
                 .body("routes[0].summary.distance", is(74.1f))
-                .body("routes[0].summary.duration", is(57.9f))
+                .body("routes[0].summary.duration", is(49.2f))
                 .statusCode(200);
 
         restrictions = new JSONObject();
@@ -3200,7 +3237,7 @@ class ResultTest extends ServiceTest {
         // Close to a border crossing
         given()
                 .headers(CommonHeaders.jsonContent)
-                .pathParam("profile", getParameter("carProfile"))
+                .pathParam("profile", "driving-hgv")
                 .body(body.toString())
                 .when()
                 .post(getEndPointPath() + "/{profile}/json")
@@ -4012,6 +4049,50 @@ class ResultTest extends ServiceTest {
                 .statusCode(404);
     }
 
+
+    @Test
+    void testCustomProfileSurfaceType() {
+        JSONObject body = new JSONObject();
+        JSONArray coordinates = new JSONArray();
+        JSONArray coord1 = new JSONArray();
+
+        coord1.put(8.692134);
+        coord1.put(49.414866);
+        coordinates.put(coord1);
+        JSONArray coord2 = new JSONArray();
+
+        coord2.put(8.688996);
+        coord2.put(49.414351);
+        coordinates.put(coord2);
+
+        body.put("coordinates", coordinates);
+
+        body.put("preference", getParameter("preference"));
+        body.put("instructions", true);
+        body.put("elevation", true);
+
+        JSONObject customModel = new JSONObject();
+        JSONObject priority = new JSONObject();
+        priority.put("if", "way_surface == PAVING_STONES");
+        priority.put("multiply_by", 0);
+        customModel.put("priority", new JSONArray().put(priority));
+        body.put("custom_model", customModel);
+
+        given()
+                .config(JSON_CONFIG_DOUBLE_NUMBERS)
+                .headers(CommonHeaders.jsonContent)
+                .pathParam("profile", getParameter("carProfile"))
+                .body(body.toString())
+                .when()
+                .post(getEndPointPath() + "/{profile}")
+                .then().log().ifValidationFails()
+                .assertThat()
+                .body("any { it.key == 'routes' }", is(true))
+                .body("routes[0].summary.distance", is(closeTo(661f, 6f))) // 248m without blocking surface
+                .statusCode(200);
+    }
+
+
     @Test
     void testCustomProfileBlockTunnels() {
         JSONObject body = new JSONObject();
@@ -4507,6 +4588,104 @@ class ResultTest extends ServiceTest {
                 .body("error.code", is(2018))
                 .body("error.message", is("Cannot compile expression: in 'priority' entry,  invalid expression \"äöü this is not a valid condition expression.\""))
                 .statusCode(500);
+    }
+
+    @Test
+    void testBarriersAccessPermit() {
+        JSONArray coordinates = new JSONArray();
+        JSONArray coord1 = new JSONArray();
+        coord1.put(8.674978);
+        coord1.put(49.406375);
+        coordinates.put(coord1);
+        JSONArray coord2 = new JSONArray();
+        coord2.put(8.674979);
+        coord2.put(49.406078);
+        coordinates.put(coord2);
+
+        JSONObject body = new JSONObject();
+        body.put("coordinates", coordinates);
+        body.put("preference", getParameter("preference"));
+
+        given()
+                .headers(CommonHeaders.jsonContent)
+                .pathParam("profile", getParameter("carProfile"))
+                .body(body.toString())
+                .when()
+                .post(getEndPointPath() + "/{profile}")
+                .then()
+                .assertThat()
+                .body("any { it.key == 'routes' }", is(true))
+                .body("routes[0].summary.distance", is(33.0f))
+                .body("routes[0].summary.duration", is(11.9f))
+                .statusCode(200);
+    }
+
+    @Test
+    void testCustomersAccess() {
+        JSONArray coord1 = new JSONArray().put(8.682474).put(49.433011);
+        JSONArray coord2 = new JSONArray().put(8.682742).put(49.433153);
+        JSONArray coordinates = new JSONArray().put(coord1).put(coord2);
+
+        JSONObject body = new JSONObject()
+                .put("coordinates", coordinates)
+                .put("preference", "shortest");
+
+        given()
+                .config(JSON_CONFIG_DOUBLE_NUMBERS)
+                .headers(CommonHeaders.jsonContent)
+                .pathParam("profile", getParameter("carProfile"))
+                .body(body.toString())
+                .when()
+                .post(getEndPointPath() + "/{profile}")
+                .then()
+                .assertThat()
+                .body("any { it.key == 'routes' }", is(true))
+                .body("routes[0].summary.distance", is(closeTo(35.6, 1)))
+                .statusCode(200);
+
+        coord2 = new JSONArray().put(8.682718).put(49.433239);
+        coordinates = new JSONArray().put(coord1).put(coord2);
+        body.put("coordinates", coordinates);
+
+        given()
+                .config(JSON_CONFIG_DOUBLE_NUMBERS)
+                .headers(CommonHeaders.jsonContent)
+                .pathParam("profile", getParameter("carProfile"))
+                .body(body.toString())
+                .when()
+                .post(getEndPointPath() + "/{profile}")
+                .then()
+                .assertThat()
+                .body("any { it.key == 'routes' }", is(true))
+                .body("routes[0].summary.distance", is(closeTo(60.3, 1)))
+                .statusCode(200);
+    }
+
+    @Test
+    void testSidewalkSurface() {
+        JSONObject body = new JSONObject()
+                .put("coordinates",HelperFunctions.constructCoords("8.69840,49.408406|8.69816,49.408937"))
+                .put("preference", "shortest")
+                .put("extra_info", constructExtras("waytype|surface"));
+
+        given()
+                .config(JSON_CONFIG_DOUBLE_NUMBERS)
+                .headers(CommonHeaders.jsonContent)
+                .pathParam("profile", getParameter("footProfile"))
+                .body(body.toString())
+                .when()
+                .post(getEndPointPath() + "/{profile}")
+                .then()
+                .assertThat()
+                .body("any { it.key == 'routes' }", is(true))
+                .body("routes[0].extras.containsKey('waytype')", is(true))
+                .body("routes[0].extras.waytype.summary[0].value", is(7.0))
+                .body("routes[0].extras.waytype.summary[0].amount", is(100.0))
+                .body("routes[0].extras.containsKey('surface')", is(true))
+                .body("routes[0].extras.surface.summary[0].value", is(14.0))
+                .body("routes[0].extras.surface.summary[0].amount", is(100.0))
+
+                .statusCode(200);
     }
 
     private JSONArray constructBearings(String coordString) {

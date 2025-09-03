@@ -5,7 +5,8 @@
     - if major version release: release notes for announcement/blog is ready
 2. Select the new release number: We use a number consisting of the parts `<major>.<minor>.<patch>`, in the following abbreviated as `X.Y.Z`. We change the patch version, if the release only contains bugfixes. Releases with additions like new features or not mandatory additional API request parameters etc. are minor releases. If there are breaking changes with require changes e.g. in existing configuration files or API requests, the major version is incremented.
 3. Create a Release branch named `releases/vX.Y.Z` and
-   a. Update CHANGELOG.md as follows:
+   a. Update `version` property in [package.json](package.json) to new release number
+   b. Update CHANGELOG.md as follows:
     1. Change unreleased to new release number
     2. Add today's Date
     3. Change unreleased link to compare new release:
@@ -15,7 +16,7 @@
     5. Double check issue links are valid
     6. Add [unreleased] section with all subsections as above
        b. Update version numbers in POM using
-       `mvn versions:set -DnewVersion=X.Y.Z`
+       `./mvnw versions:set -DnewVersion=X.Y.Z`
        or setting it manually in the main and all child POMs
        c. Commit changes as chore or build, and push
        d. Open and merge PR as
@@ -55,5 +56,5 @@
     - git push origin tag latest
     - git push origin tag vX
 7. Update version in POMs to X.Y.Z-SNAPSHOT using
-   mvn versions:set -DnewVersion=X.Y.Z-SNAPSHOT
+   ./mvnw versions:set -DnewVersion=X.Y.Z-SNAPSHOT
 8. Check whether outreach, announcement, … is necessary and do so.
